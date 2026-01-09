@@ -1,14 +1,5 @@
 # Developer Documentation - Inception Project
 
-## Project Overview
-
-This project implements a complete Docker-based web infrastructure using:
-- **NGINX** (Alpine/Debian) - Reverse proxy with TLS
-- **WordPress + PHP-FPM** (Alpine/Debian) - CMS application layer
-- **MariaDB** (Alpine/Debian) - Database layer
-
-All services are built from custom Dockerfiles and orchestrated with Docker Compose.
-
 ## Project Structure
 
 ```
@@ -39,23 +30,41 @@ inception/
                 └── wordpress-setup.sh
 ```
 
-## Environment Setup from Scratch
+## Environment Setup
 
 ### Prerequisites
 
-1. **Virtual Machine** (recommended: VirtualBox)
-   - OS: Debian 12 (Bookworm) or Alpine Linux (latest stable)
-   - RAM: Minimum 8GB
-   - Disk: 50GB
-   - Network: Bridge or NAT with port forwarding
+1. **Virtual Machine** VirtualBox
+    - Name: inception-vm
+    - Username: rgrochow
+    - Domain name: rgrochow.42.fr
+    - OS: Debian 12 Bookworm
+    - CPU: 4
+    - RAM: 8GB
+    - Disk: 50GB
 
 2. **System Updates**
 ```bash
+su -
+usermod -aG sudo rgrochow
+exit
+```
+    - restart VM
+```bash
+echo "$(whoami) ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/nopasswd
 sudo apt update && sudo apt upgrade -y
 ```
 
 3. **Install Docker Engine**
 ```bash
+# Install Build Tools
+sudo apt install -y \
+    ca-certificates \
+    curl \
+    gnupg \
+    git \
+    make \
+    vim
 # Add Docker's official GPG key
 sudo install -m 0755 -d /etc/apt/keyrings
 curl -fsSL https://download.docker.com/linux/debian/gpg | \
@@ -77,9 +86,29 @@ sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 sudo usermod -aG docker $USER
 ```
 
-4. **Install Build Tools**
+### Transferring Project Files to VM
+
+If you're developing on a host machine and need to transfer files to the VM:
+
+#### On Host Machine
 ```bash
-sudo apt install -y make git vim
+# Navigate to your project directory
+cd /home/rgrochow/inception
+
+# Start a simple HTTP server
+python3 -m http.server 8000
+
+# Find your host IP address
+ip a | grep inet  # Look for address like 192.168.1.X
+```
+
+#### In VM
+```bash
+# Download entire folder structure
+wget -r -np -nH --cut-dirs=0 http://192.168.1.X:8000/
+
+# Or download a single file
+wget http://192.168.1.X:8000/Makefile
 ```
 
 ### Configuration Files
@@ -91,7 +120,6 @@ Create `srcs/.env` with all required variables:
 ```bash
 # Domain Configuration
 DOMAIN_NAME=rgrochow.42.fr
-
 # MySQL/MariaDB Configuration
 MYSQL_DATABASE=wordpress_db
 MYSQL_USER=wp_user
@@ -108,22 +136,11 @@ WP_USER_PASSWORD=secure_user_password_here
 WP_USER_EMAIL=user@example.com
 ```
 
-⚠️ **Security**: Never commit `.env` to git! Add it to `.gitignore`.
-
 #### 2. Hosts Configuration
 
 Add domain to `/etc/hosts`:
 ```bash
 echo "127.0.0.1   rgrochow.42.fr" | sudo tee -a /etc/hosts
-```
-
-#### 3. Data Directories
-
-Create persistent storage directories:
-```bash
-sudo mkdir -p /home/radek/data/mariadb
-sudo mkdir -p /home/radek/data/wordpress
-sudo chown -R $USER:$USER /home/radek/data
 ```
 
 ## Building and Launching
@@ -136,8 +153,17 @@ The Makefile provides convenient commands:
 # Build and start all services
 make
 
+# Start all services without build
+make up
+
 # Stop services (keep data)
 make down
+
+# View logs from all services
+make logs
+
+# List running containers
+make ps
 
 # Stop and remove containers
 make clean
@@ -231,7 +257,7 @@ docker network inspect inception | grep Name
 
 ### Named Volumes vs Bind Mounts
 
-This project uses **Docker named volumes** (as required by version 5.2):
+This project uses **Docker named volumes**
 
 **Named Volumes** (current implementation):
 ```yaml
@@ -241,14 +267,13 @@ volumes:
     driver_opts:
       type: none
       o: bind
-      device: /home/radek/data/wordpress
+      device: /home/rgrochow/data/wordpress
 ```
 
 **Advantages**:
 - Managed by Docker
 - Better portability
 - Consistent permissions
-- Easier backup/restore
 
 ### Data Locations
 
@@ -257,20 +282,20 @@ volumes:
   - WordPress: `/var/www/html`
 
 - **Host side** (actual storage):
-  - MariaDB: `/home/radek/data/mariadb`
-  - WordPress: `/home/radek/data/wordpress`
+  - MariaDB: `/home/rgrochow/data/mariadb`
+  - WordPress: `/home/rgrochow/data/wordpress`
 
 ### Accessing Data
 
 ```bash
 # View database files
-ls -la /home/radek/data/mariadb/
+ls -la /home/rgrochow/data/mariadb/
 
 # View WordPress files
-ls -la /home/radek/data/wordpress/
+ls -la /home/rgrochow/data/wordpress/
 
 # Edit WordPress config directly (if needed)
-nano /home/radek/data/wordpress/wp-config.php
+nano /home/rgrochow/data/wordpress/wp-config.php
 ```
 
 ## Service Architecture
@@ -347,10 +372,10 @@ docker network inspect inception
 #### Permission Issues
 ```bash
 # Check data directory permissions
-ls -la /home/radek/data/
+ls -la /home/rgrochow/data/
 
 # Fix permissions
-sudo chown -R $USER:$USER /home/radek/data
+sudo chown -R $USER:$USER /home/rgrochow/data
 ```
 
 ### Database Access
@@ -369,7 +394,7 @@ SELECT * FROM wp_users;
 
 ### WordPress CLI
 
-Access WordPress via WP-CLI (if installed):
+Access WordPress via WP-CLI:
 ```bash
 docker exec -it wordpress wp --allow-root user list
 docker exec -it wordpress wp --allow-root plugin list
@@ -377,12 +402,9 @@ docker exec -it wordpress wp --allow-root plugin list
 
 ## Security Best Practices
 
-1. **Environment Variables**: Always use `.env` file, never hardcode credentials
-2. **Git**: Add `.env` to `.gitignore`
-3. **Secrets**: Consider using Docker secrets in production
-4. **TLS**: Use proper certificates in production (Let's Encrypt)
-5. **Updates**: Regularly update base images and packages
-6. **Permissions**: Use least privilege principle for file permissions
+**Environment Variables**: Always use `.env` file, never hardcode credentials
+**Git**: Add `.env` to `.gitignore`
+**TLS**: Use proper certificates in production (Let's Encrypt)
 
 ## Testing
 
@@ -410,27 +432,12 @@ curl -k https://rgrochow.42.fr/wp-admin
 docker exec wordpress wp --allow-root db check
 ```
 
-## Performance Optimization
-
-- Use multi-stage builds in Dockerfiles
-- Minimize layer count
-- Use `.dockerignore` to exclude unnecessary files
-- Optimize image size (use Alpine when possible)
-- Cache dependencies appropriately
-
 ## Troubleshooting Reference
 
 | Issue | Command | Solution |
 |-------|---------|----------|
 | Port already in use | `sudo lsof -i :443` | Stop conflicting service |
-| Volume permission denied | `ls -la /home/radek/data` | Fix ownership with chown |
+| Volume permission denied | `ls -la /home/rgrochow/data` | Fix ownership with chown |
 | Container won't start | `docker logs <container>` | Check logs for errors |
 | Network not found | `docker network ls` | Recreate with compose up |
 | Database corruption | `make fclean && make` | Rebuild from scratch |
-
-## Additional Resources
-
-- [Docker Compose File Reference](https://docs.docker.com/compose/compose-file/)
-- [Dockerfile Best Practices](https://docs.docker.com/develop/develop-images/dockerfile_best-practices/)
-- [Docker Networking Deep Dive](https://docs.docker.com/network/)
-- [Docker Volumes Documentation](https://docs.docker.com/storage/volumes/)
