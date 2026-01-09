@@ -1,46 +1,60 @@
-services: # Definicja wszystkich kontenerów
-  mariadb: # Serwis bazy danych
-    container_name: mariadb # Nazwa kontenera (dla docker ps)
-    build: ./requirements/mariadb # Buduje z Dockerfile w tym katalogu
-    image: mariadb # Nazwa obrazu po zbudowaniu
-    volumes: # Montowanie katalogów z VM do kontenera
-      - /home/radek/data/mariadb:/var/lib/mysql # Bind mount dla bazy danych (persistence)
-    networks: # Podłączenie do sieci Docker
-      - inception # Sieć wspólna dla wszystkich kontenerów
-    env_file: # Ładowanie zmiennych środowiskowych
-      - .env # Plik ze wszystkimi hasłami i konfiguracją
-    restart: unless-stopped # Automatyczny restart po awarii
+services:
+  mariadb:
+    container_name: mariadb
+    build: ./requirements/mariadb
+    image: mariadb
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    networks:
+      - inception
+    env_file:
+      - .env
+    restart: unless-stopped
 
-  wordpress: # Serwis WordPress z PHP-FPM
-    container_name: wordpress # Nazwa kontenera
-    build: ./requirements/wordpress # Buduje z Dockerfile WordPress
-    image: wordpress # Nazwa obrazu
-    depends_on: # Zależności - WordPress potrzebuje bazy
-      - mariadb # Czeka aż mariadb wystartuje
-    volumes: # Katalogi współdzielone
-      - /home/radek/data/wordpress:/var/www/html # Pliki WordPress (persistence)
-    networks: # Sieć komunikacji
-      - inception # Ta sama sieć co mariadb
-    env_file: # Zmienne środowiskowe
-      - .env # Dane logowania do bazy, URL, etc.
-    restart: unless-stopped # Auto-restart
+  wordpress:
+    container_name: wordpress
+    build: ./requirements/wordpress
+    image: wordpress
+    depends_on:
+      - mariadb
+    volumes:
+      - wordpress_data:/var/www/html
+    networks:
+      - inception
+    env_file:
+      - .env
+    restart: unless-stopped
 
-  nginx: # Serwis web server (reverse proxy)
-    container_name: nginx # Nazwa kontenera
-    build: ./requirements/nginx # Buduje z Dockerfile nginx
-    image: nginx # Nazwa obrazu
-    depends_on: # Nginx potrzebuje WordPress
-      - wordpress # Czeka na WordPress
-    volumes: # Współdzieli folder WordPress
-      - /home/radek/data/wordpress:/var/www/html # Ten sam folder co wordpress (do serwowania plików)
-    networks: # Sieć
-      - inception # Ta sama sieć - może komunikować się z wordpress:9000
-    ports: # Mapowanie portów VM:kontener
-      - "443:443" # Port HTTPS - jedyny dostęp z zewnątrz
-    env_file: # Zmienne środowiskowe
-      - .env # Dla spójności (opcjonalne dla nginx)
-    restart: unless-stopped # Auto-restart
+  nginx:
+    container_name: nginx
+    build: ./requirements/nginx
+    image: nginx
+    depends_on:
+      - wordpress
+    volumes:
+      - wordpress_data:/var/www/html
+    networks:
+      - inception
+    ports:
+      - "443:443"
+    env_file:
+      - .env
+    restart: unless-stopped
 
-networks: # Definicja sieci Docker
-  inception: # Nazwa sieci
-    driver: bridge # Typ: bridge network (najczęstszy)
+volumes:
+  mariadb_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /home/radek/data/mariadb
+  wordpress_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /home/radek/data/wordpress
+
+networks:
+  inception:
+    driver: bridge

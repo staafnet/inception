@@ -1,0 +1,25 @@
+# Environment variables with sensitive data
+# srcs/.env
+# .env
+
+# Docker volumes data (stored on host)
+/home/*/data/
+
+# Temporary files
+*.swp
+*.swo
+*~
+.DS_Store
+
+# IDE files
+.vscode/
+.idea/
+*.iml
+
+# Log files
+*.log
+
+# Backup files
+*.backup
+*.bak
+*.tar.gz
